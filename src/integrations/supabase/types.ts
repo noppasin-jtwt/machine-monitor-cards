@@ -14,7 +14,74 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      machine_alarms: {
+        Row: {
+          created_at: string
+          id: number
+          machine_id: number
+          message: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          machine_id: number
+          message: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          machine_id?: number
+          message?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machine_alarms_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      machines: {
+        Row: {
+          bolt: number
+          cylinder: number
+          emergency: number
+          id: number
+          line: string
+          name: string
+          plc: number
+          rssi: number | null
+          snr: number | null
+          updated_at: string
+        }
+        Insert: {
+          bolt?: number
+          cylinder?: number
+          emergency?: number
+          id: number
+          line?: string
+          name: string
+          plc?: number
+          rssi?: number | null
+          snr?: number | null
+          updated_at?: string
+        }
+        Update: {
+          bolt?: number
+          cylinder?: number
+          emergency?: number
+          id?: number
+          line?: string
+          name?: string
+          plc?: number
+          rssi?: number | null
+          snr?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
