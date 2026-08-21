@@ -67,7 +67,7 @@ function Index() {
                 activeNav === item
                   ? "bg-nav text-nav-foreground"
                   : "bg-background text-foreground hover:bg-muted"
-              }`}
+              } ${item === "Graph" ? "mr-8 lg:mr-0 lg:mb-8" : ""}`}
               aria-current={activeNav === item ? "page" : undefined}
             >
               {item}
