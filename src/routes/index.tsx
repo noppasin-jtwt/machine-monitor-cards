@@ -111,7 +111,7 @@ function Index() {
 
     const channel = supabase
       .channel("machine-monitor")
-      .on("postgres_changes", { event: "*", schema: "public", table: "machines" }, (payload) => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "machines" }, (payload:any) => {
         const row = payload.new as Machine;
         if (!row?.id) return;
         setMachines((prev) =>
