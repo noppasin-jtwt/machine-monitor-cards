@@ -5,10 +5,22 @@ import json
 import threading
 from datetime import datetime
 
+from machine_log import EmergencyLogger
+
+logger = EmergencyLogger()
+logger.ensure_file()
+
 app = Flask(__name__)
 CORS(app)
 
 machines = {}
+
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
 
 def serial_reader():
 
@@ -18,23 +30,54 @@ def serial_reader():
         timeout=1
     )
 
+    print("[SYSTEM] Serial Reader Started")
+
     while True:
 
         try:
 
-            line = ser.readline().decode().strip()
+            line = ser.readline().decode(
+                errors="ignore"
+            ).strip()
 
             if not line.startswith("{"):
                 continue
 
+            print(f"[RX] {line}")
+
             data = json.loads(line)
 
-            data["last_update"] = datetime.now().isoformat()
+            data["last_update"] = (
+                datetime.now().isoformat()
+            )
 
-            machines[data["machine_no"]] = data
+            machine_no = data["machine_no"]
+
+            machines[machine_no] = data
+
+            logger.update(
+                machine_no,
+                data.get("PLC", 0),
+                data.get("Emergency", 0),
+                data.get("Auto", 0),
+                data.get("rssi"),
+                data.get("snr")
+            )
 
         except Exception as e:
-            print(e)
+
+            print(
+                f"[ERROR] Serial Reader: {e}"
+            )
+
+
+@app.route("/")
+def home():
+
+    return jsonify({
+        "status": "running",
+        "message": "Machine Monitoring Backend"
+    })
 
 
 @app.route("/api/machines")
@@ -44,11 +87,12 @@ def get_machines():
         list(machines.values())
     )
 
-@app.route("/")
-def home():
+
+@app.route("/api/emergency-log")
+def emergency_log():
+
     return jsonify({
-        "status": "running",
-        "message": "Machine Monitoring Backend"
+        "file": "emergency_log.csv"
     })
 
 
@@ -59,4 +103,4 @@ if __name__ == "__main__":
         daemon=True
     ).start()
 
-    app.run(port=5000)
+    app.run(host="0.0.0.0", port=5000)

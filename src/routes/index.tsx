@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-
-import { supabase } from "@/integrations/supabase/client";
+import { getMachines } from "../services/api";
+import { MACHINE_NAMES } from "../configs/machine";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -27,62 +27,113 @@ export const Route = createFileRoute("/")({
 
 const navItems = ["Main", "History", "Graph"] as const;
 
-const MACHINE_NAMES: Record<number, string> = {
-  1: "Supply Bolt HS/FW [SL]",
-  2: "Supply Bolt RH [SL]",
-  3: "Supply Bolt LH [SL]",
-  4: "Front Axle Assembly",
-  5: "Rear Axle Assembly",
-  6: "Engine Mount Assembly",
-  7: "Brake Inspection",
-  8: "Paint Inspection",
-  9: "Final Inspection",
-};
+// const MACHINE_NAMES: Record<number, string> = {
+//   1: "Supply Bolt Piston [ML]",
+//   2: "Supply Bolt HS/FW [SL]",
+//   3: "Supply Head Cover [ML]",
+//   4: "FW CiRA CORE [SL]"
+// };
 
 const OFFLINE_AFTER_MS = 30_000;
 
 type Machine = {
-  id: number;
-  name: string;
-  plc: number;
-  bolt: number;
-  cylinder: number;
-  emergency: number;
-  rssi: number | null;
-  snr: number | null;
-  line: string;
-  updated_at: string;
+  machine_no: number;
+  PLC: number;
+  Emergency: number;
+  Auto: number;
+  last_update: string;
 };
 
-type Status = "normal" | "alarm" | "offline";
+type Status =
+  | "online"
+  | "offline"
+  | "manual"
+  | "abnormal";
 
-function machineName(machine: Machine) {
-  return MACHINE_NAMES[machine.id] ?? machine.name;
-}
-
-function getStatus(machine: Machine, now: number): Status {
-  if (now - new Date(machine.updated_at).getTime() > OFFLINE_AFTER_MS) return "offline";
-  if (machine.plc === 0 || machine.bolt === 1 || machine.cylinder === 1 || machine.emergency === 1) {
-    return "alarm";
-  }
-  return "normal";
-}
-
-function alarmReasons(machine: Machine, status: Status): string[] {
-  if (status === "offline") return ["Communication Lost"];
-  const reasons: string[] = [];
-  if (machine.plc === 0) reasons.push("PLC Offline");
-  if (machine.bolt === 1) reasons.push("Bolt Alarm");
-  if (machine.cylinder === 1) reasons.push("Cylinder Alarm");
-  if (machine.emergency === 1) reasons.push("Emergency ON");
-  return reasons;
-}
+const statusText: Record<Status, string> = {
+  online: "Machine Online",
+  offline: "Machine Offline",
+  manual: "Manual Mode",
+  abnormal: "Abnormal Alert",
+};
 
 const cardClass: Record<Status, string> = {
-  normal: "bg-running text-running-foreground",
-  alarm: "bg-alert text-alert-foreground",
-  offline: "bg-offline text-offline-foreground",
+  online: "bg-green-500 text-white",
+
+  offline: "bg-gray-500 text-white",
+
+  manual: "bg-blue-900 text-white",
+
+  abnormal: "bg-red-600 text-white",
 };
+
+function machineName(machine: Machine) {
+  return (
+    MACHINE_NAMES[machine.machine_no] ??
+    `Unknown Machine (${machine.machine_no})`
+  );
+}
+
+function getStatus(
+  machine: Machine,
+  now: number
+): Status {
+
+  // Communication timeout
+
+    if (
+      now -
+        new Date(
+          machine.last_update
+        ).getTime() >
+      OFFLINE_AFTER_MS
+    ) {
+      return "offline";
+    }
+
+    // PLC OFF
+
+    if (machine.PLC === 0) {
+      return "offline";
+    }
+
+    // Emergency
+
+    if (machine.Emergency === 1) {
+      return "abnormal";
+    }
+
+    // Manual mode
+
+    if (machine.Auto === 1) {
+      return "manual";
+    }
+
+    // Auto + PLC ON + No Emergency
+
+    return "online";
+}
+
+function alarmReasons(
+  machine: Machine,
+  status: Status
+): string[] {
+
+  switch (status) {
+
+    case "offline":
+      return ["Machine Offline"];
+
+    case "manual":
+      return ["Manual Mode"];
+
+    case "abnormal":
+      return ["Abnormal Alert"];
+
+    default:
+      return [];
+  }
+}
 
 function Index() {
   const [activeNav, setActiveNav] = useState<string>("Main");
@@ -91,54 +142,132 @@ function Index() {
   const [selected, setSelected] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [loading, setLoading] = useState(true);
+  const [alarmHistory, setAlarmHistory] = useState<string[]>([]);
+  const [previousAlarms, setPreviousAlarms] =
+  useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+
+  const currentAlarms = new Set<string>();
+
+  machines.forEach((machine) => {
+
+    const status = getStatus(machine, now);
+
+    if (
+  status === "abnormal" ||
+  status === "manual"
+)  {
+
+      alarmReasons(machine, status)
+        .forEach((reason) => {
+
+          const key =
+            `${machine.machine_no}-${reason}`;
+
+          currentAlarms.add(key);
+
+          if (!previousAlarms.has(key)) {
+
+            const timestamp =
+              new Date().toLocaleString();
+
+            setAlarmHistory(prev => [
+
+              `[${timestamp}] ${machineName(machine)} : ${reason}`,
+
+              ...prev,
+
+            ]);
+          }
+        });
+    }
+  });
+
+  previousAlarms.forEach((alarm) => {
+
+    if (!currentAlarms.has(alarm)) {
+
+      const machineNo =
+        Number(alarm.split("-")[0]);
+
+      const reason =
+        alarm.substring(
+          alarm.indexOf("-") + 1
+        );
+
+      const machine = machines.find(
+        m => m.machine_no === machineNo
+      );
+
+      if (machine) {
+
+        const timestamp =
+          new Date().toLocaleString();
+
+        let recoveryMessage = `${reason} Cleared`;
+
+        if (reason === "Manual Mode") {
+          recoveryMessage = "Auto Mode";
+        }
+
+        if (reason === "Abnormal Alert") {
+          recoveryMessage = "Normally";
+        }
+
+        setAlarmHistory(prev => [
+
+          `[${timestamp}] ${machineName(machine)} : ${recoveryMessage}`,
+
+          ...prev,
+
+        ]);
+      }
+    }
+  });
+
+  setPreviousAlarms(currentAlarms);
+
+}, [machines, now]);
 
   useEffect(() => {
-    let cancelled = false;
 
-    async function load() {
-      const { data } = await supabase.from("machines").select("*").order("id");
-      if (cancelled) return;
-      if (data) setMachines(data as Machine[]);
+  const loadMachines = async () => {
+
+    try {
+
+      const data = await getMachines();
+
+      setMachines(data);
+
       setLoading(false);
+
+    } catch (error) {
+
+      console.error(error);
+
     }
 
-    void load();
+  };
 
-    const channel = supabase
-      .channel("machine-monitor")
-      .on("postgres_changes", { event: "*", schema: "public", table: "machines" }, (payload:any) => {
-        const row = payload.new as Machine;
-        if (!row?.id) return;
-        setMachines((prev) =>
-          (prev.some((m) => m.id === row.id)
-            ? prev.map((m) => (m.id === row.id ? row : m))
-            : [...prev, row]
-          ).sort((a, b) => a.id - b.id),
-        );
-      })
-      .subscribe();
+    loadMachines();
 
-    const poll = window.setInterval(() => void load(), 15_000);
+    const timer = setInterval(
+      loadMachines,
+      1000
+    );
 
-    return () => {
-      cancelled = true;
-      window.clearInterval(poll);
-      void supabase.removeChannel(channel);
-    };
+    return () => clearInterval(timer);
+
   }, []);
 
   const activeAlarms = useMemo(
     () =>
       machines.flatMap((machine) => {
         const status = getStatus(machine, now);
-        if (status === "normal") return [];
+        if (status === "online" || status === "offline") return [];
         return alarmReasons(machine, status).map((reason) => ({
-          key: `${machine.id}-${reason}`,
+          key: `${machine.machine_no}-${reason}`,
           label: `${machineName(machine)} : ${reason}`,
         }));
       }),
@@ -146,7 +275,7 @@ function Index() {
   );
 
   const selectedMachine = useMemo(
-    () => machines.find((m) => m.id === selected) ?? null,
+    () => machines.find((m) => m.machine_no === selected) ?? null,
     [machines, selected],
   );
 
@@ -218,13 +347,21 @@ function Index() {
                     const status = getStatus(machine, now);
                     return (
                       <button
-                        key={machine.id}
-                        onClick={() => setSelected(machine.id)}
+                        key={machine.machine_no}
+                        onClick={() => setSelected(machine.machine_no)}
                         className={`flex h-40 items-center justify-center rounded-2xl p-6 text-center shadow-md transition-all duration-200 hover:-translate-y-1 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${cardClass[status]}`}
                       >
-                        <span className="text-xl font-bold leading-snug sm:text-2xl">
+                      <div className="flex flex-col items-center">
+
+                        <span className="text-lg font-bold">
                           {machineName(machine)}
                         </span>
+
+                        <span className="mt-3 rounded-lg bg-black/20 px-3 py-1 text-sm">
+                          {statusText[status]}
+                        </span>
+
+                      </div>
                       </button>
                     );
                   })}
@@ -244,20 +381,30 @@ function Index() {
               Active Alarm List
             </h2>
             <div className="max-h-56 min-h-[6rem] overflow-y-auto rounded-xl bg-card p-4">
-              {activeAlarms.length === 0 ? (
-                <p className="text-sm font-medium text-muted-foreground">No Active Alarm</p>
-              ) : (
-                <ul className="space-y-2">
-                  {activeAlarms.map((alarm) => (
-                    <li
-                      key={alarm.key}
-                      className="border-b border-border pb-2 text-sm font-semibold text-alert last:border-0 last:pb-0"
-                    >
-                      {alarm.label}
-                    </li>
-                  ))}
-                </ul>
-              )}
+             {alarmHistory.length === 0 ? (
+
+              <p className="text-sm text-muted-foreground">
+                No Alarm History
+              </p>
+
+            ) : (
+
+              <ul className="space-y-2">
+
+                {alarmHistory.map((log, index) => (
+
+                  <li
+                    key={index}
+                    className="border-b border-border pb-2 text-sm"
+                  >
+                    {log}
+                  </li>
+
+                ))}
+
+              </ul>
+
+            )}
             </div>
           </section>
         </main>
@@ -311,16 +458,47 @@ function MachineDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const rows: Array<[string, string]> = [
-    ["PLC Status", machine.plc === 1 ? "OK (1)" : "Lost (0)"],
-    ["Bolt Status", machine.bolt === 1 ? "Fault (1)" : "Normal (0)"],
-    ["Cylinder Status", machine.cylinder === 1 ? "Fault (1)" : "Normal (0)"],
-    ["Emergency", machine.emergency === 1 ? "Pressed (1)" : "Clear (0)"],
-    ["RSSI", machine.rssi === null ? "—" : `${machine.rssi} dBm`],
-    ["SNR", machine.snr === null ? "—" : `${machine.snr} dB`],
-    ["Line", machine.line],
-    ["Last update", new Date(machine.updated_at).toLocaleString()],
-  ];
+const rows: Array<[string, string]> = [
+
+  [
+    "Machine Status",
+    machine.PLC === 1
+      ? "Machine Online"
+      : "Machine Offline"
+  ],
+
+];
+
+// Only show Mode and Alarm when machine is online
+
+if (status !== "offline") {
+
+  rows.push(
+    [
+      "Operation Mode",
+      machine.Auto === 0
+        ? "Auto Mode"
+        : "Manual Mode"
+    ]
+  );
+
+  rows.push(
+    [
+      "Alarm Status",
+      machine.Emergency === 1
+        ? "Abnormal Alert"
+        : "Normally"
+    ]
+  );
+
+}
+
+rows.push(
+  [
+    "Last Update",
+    new Date(machine.last_update).toLocaleString()
+  ]
+);
 
   return (
     <div
@@ -341,7 +519,7 @@ function MachineDialog({
             <span
               className={`mt-1 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${cardClass[status]}`}
             >
-              {status === "normal" ? "Running" : status === "alarm" ? "Alarm" : "Offline"}
+              {statusText[status]}
             </span>
           </div>
           <button
