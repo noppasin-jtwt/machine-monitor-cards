@@ -1,5 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+type LogRow = {
+  machine_no: number;
+  machine_name: string;
+  event: string;
+  plc: number;
+  emergency: number;
+  auto: number;
+  rssi: number | null;
+  snr: number | null;
+  created_at: string;
+};
+
 export const Route = createFileRoute("/api/history")({
   server: {
     handlers: {
