@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
+import { HistoryView } from "@/components/HistoryView";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -229,6 +230,8 @@ function Index() {
                     );
                   })}
             </section>
+          ) : activeNav === "History" ? (
+            <HistoryView />
           ) : (
             <section className="rounded-2xl bg-card p-10 text-center shadow-sm">
               <h2 className="text-xl font-bold text-card-foreground">{activeNav}</h2>
