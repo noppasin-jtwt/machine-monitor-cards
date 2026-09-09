@@ -8,9 +8,19 @@ export const Route = createFileRoute("/api/history")({
         const limit = Math.min(Number(url.searchParams.get("limit")) || 500, 2000);
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const db = supabaseAdmin as unknown as {
+          from: (table: string) => ReturnType<typeof supabaseAdmin.from>;
+        };
 
-        const { data, error } = await supabaseAdmin
-          .from("machine_logs")
+        const { data, error } = await (db
+          .from("machine_logs") as unknown as {
+          select: (cols: string) => {
+            order: (
+              col: string,
+              opts: { ascending: boolean },
+            ) => { limit: (n: number) => Promise<{ data: LogRow[] | null; error: { message: string } | null }> };
+          };
+        })
           .select("machine_no, machine_name, event, plc, emergency, auto, rssi, snr, created_at")
           .order("created_at", { ascending: false })
           .limit(limit);
