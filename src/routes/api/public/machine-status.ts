@@ -7,6 +7,7 @@ const payloadSchema = z.object({
   bolt: z.number().int().min(0).max(1),
   cylinder: z.number().int().min(0).max(1),
   emergency: z.number().int().min(0).max(1),
+  auto: z.number().int().min(0).max(1).optional(),
   rssi: z.number().optional(),
   snr: z.number().optional(),
   line: z.string().max(60).optional(),
@@ -68,6 +69,27 @@ export const Route = createFileRoute("/api/public/machine-status")({
           .eq("id", data.machine_id);
 
         if (updateError) return json({ error: updateError.message }, 500);
+
+        // Write an event log entry for the History page.
+        let event = "HEARTBEAT";
+        if (existing.plc !== data.plc) event = data.plc === 1 ? "PLC_ON" : "PLC_OFF";
+        else if (existing.emergency !== data.emergency)
+          event = data.emergency === 1 ? "EMERGENCY_ON" : "EMERGENCY_OFF";
+        else if (data.auto !== undefined) event = data.auto === 1 ? "AUTO_MODE" : "MANUAL_MODE";
+
+        const db = supabaseAdmin as unknown as {
+          from: (table: string) => { insert: (row: Record<string, unknown>) => Promise<unknown> };
+        };
+        await db.from("machine_logs").insert({
+          machine_no: data.machine_id,
+          machine_name: existing.name,
+          event,
+          plc: data.plc,
+          emergency: data.emergency,
+          auto: data.auto ?? 0,
+          rssi: data.rssi ?? null,
+          snr: data.snr ?? null,
+        });
 
         const wasAlarm =
           existing.plc === 0 ||
