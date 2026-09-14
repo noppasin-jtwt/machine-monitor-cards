@@ -1,14 +1,14 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, Response
 from flask_cors import CORS
 import serial
 import json
 import threading
+import time
 from datetime import datetime
 
-from machine_log import EmergencyLogger
+from machine_log import MachineLogger
 
-logger = EmergencyLogger()
-logger.ensure_file()
+logger = MachineLogger()
 
 app = Flask(__name__)
 CORS(app)
@@ -25,7 +25,7 @@ def add_cors_headers(response):
 def serial_reader():
 
     ser = serial.Serial(
-        "COM5",
+        "/dev/ttyACM0",
         115200,
         timeout=1
     )
@@ -52,6 +52,8 @@ def serial_reader():
             )
 
             machine_no = data["machine_no"]
+            print(f"Stored machine {machine_no}: "
+            f"PLC = {data['PLC']}")
 
             machines[machine_no] = data
 
@@ -63,6 +65,7 @@ def serial_reader():
                 data.get("rssi"),
                 data.get("snr")
             )
+            time.sleep(10)
 
         except Exception as e:
 
@@ -88,12 +91,30 @@ def get_machines():
     )
 
 
-@app.route("/api/emergency-log")
-def emergency_log():
+@app.route("/api/history")
+def get_history():
+    log_file = MachineLogger.get_machine_log_file()
 
-    return jsonify({
-        "file": "emergency_log.csv"
-    })
+    row = []
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+    except FileNotFoundError:
+        pass
+    rows.reverse()
+
+
+    return jsonify(rows)
+
+@app.route("/api/stream")
+def stream():
+    def generate():
+        while True:
+            data = json.dumps(list(machines.values()))
+            yield f"data: {data}\n\n"
+            time.sleep(0.2)
+    return Response(generate(), mimetype="text/event-stream")
 
 
 if __name__ == "__main__":

@@ -231,37 +231,56 @@ function Index() {
   setPreviousAlarms(currentAlarms);
 
 }, [machines, now]);
-
   useEffect(() => {
-
-  const loadMachines = async () => {
-
-    try {
-
-      const data = await getMachines();
-
-      setMachines(data);
-
-      setLoading(false);
-
-    } catch (error) {
-
-      console.error(error);
-
-    }
-
-  };
-
-    loadMachines();
-
-    const timer = setInterval(
-      loadMachines,
-      1000
+    const eventSource = new EventSource(
+      "http://172.20.177.186:5000/api/stream"
     );
-
-    return () => clearInterval(timer);
-
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(
+        event.data
+      );
+      setMachines(data);
+    };
+    eventSource.onerror = (error) => {
+      console.error("SSE Error:",
+        error
+      );
+    };
+    return () => {
+      eventSource.close()
+    };
   }, []);
+
+  // useEffect(() => {
+
+  // const loadMachines = async () => {
+
+  //   try {
+
+  //     const data = await getMachines();
+
+  //     setMachines(data);
+
+  //     //setLoading(false);
+
+  //   } catch (error) {
+
+  //     console.error(error);
+
+  //   }
+
+  // };
+
+  //   loadMachines();
+
+  //   const timer = setInterval(
+  //     loadMachines,
+  //     1000
+  //   );
+
+  //   return () => clearInterval(timer);
+
+  // }, []);
 
   const activeAlarms = useMemo(
     () =>

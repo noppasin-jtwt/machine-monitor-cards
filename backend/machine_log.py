@@ -2,8 +2,9 @@ import csv
 import os
 from datetime import datetime
 
-EMERGENCY_LOG_FILE = "emergency_log.csv"
-MACHINE_LOG_FILE = "machine_log.csv"
+# ============================================================
+# MACHINE NAME MAPPING
+# ============================================================
 
 MACHINE_NAMES = {
     1: "Supply Bolt HS/FW [SL]",
@@ -13,46 +14,78 @@ MACHINE_NAMES = {
 }
 
 
-class EmergencyLogger:
+# ============================================================
+# MACHINE LOGGER
+# ============================================================
+
+class MachineLogger:
 
     def __init__(self):
 
-        self.states = {}
         self.previous_status = {}
+        self.last_heartbeat = {}
 
-    def ensure_file(self):
+        # Create logs folder automatically
 
-        if not os.path.exists(EMERGENCY_LOG_FILE):
+        self.log_dir = "logs"
 
-            with open(
-                EMERGENCY_LOG_FILE,
-                "w",
-                newline="",
-                encoding="utf-8"
-            ) as f:
+        os.makedirs(
+            self.log_dir,
+            exist_ok=True
+        )
 
-                writer = csv.writer(f)
+    # ========================================================
+    # Generate Daily Log File
+    # Example:
+    # logs/machine_log_2026-09-09.csv
+    # ========================================================
 
-                writer.writerow([
-                    "machine_no",
-                    "machine_name",
-                    "event",
-                    "start_time",
-                    "end_time",
-                    "duration_seconds",
-                    "duration_minutes"
-                ])
+    def get_log_file(self):
 
-        if not os.path.exists(MACHINE_LOG_FILE):
+        current_date = datetime.now().strftime(
+            "%Y-%m-%d"
+        )
 
-            with open(
-                MACHINE_LOG_FILE,
-                "w",
-                newline="",
-                encoding="utf-8"
-            ) as f:
+        return os.path.join(
+            self.log_dir,
+            f"machine_log_{current_date}.csv"
+        )
 
-                writer = csv.writer(f)
+    # ========================================================
+    # Write CSV
+    # ========================================================
+
+    def write_log(
+        self,
+        machine_no,
+        event,
+        plc,
+        emergency,
+        auto_mode,
+        rssi=None,
+        snr=None
+    ):
+
+        log_file = self.get_log_file()
+
+        file_exists = os.path.exists(log_file)
+
+        machine_name = MACHINE_NAMES.get(
+            machine_no,
+            f"Machine {machine_no}"
+        )
+
+        with open(
+            log_file,
+            "a",
+            newline="",
+            encoding="utf-8"
+        ) as f:
+
+            writer = csv.writer(f)
+
+            # Create header
+            if not file_exists:
 
                 writer.writerow([
                     "timestamp",
@@ -66,37 +99,10 @@ class EmergencyLogger:
                     "snr"
                 ])
 
-    def write_machine_log(
-        self,
-        machine_no,
-        event,
-        plc,
-        emergency,
-        auto_mode,
-        rssi=None,
-        snr=None
-    ):
-
-        machine_name = MACHINE_NAMES.get(
-            machine_no,
-            f"Machine {machine_no}"
-        )
-
-        timestamp = datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-
-        with open(
-            MACHINE_LOG_FILE,
-            "a",
-            newline="",
-            encoding="utf-8"
-        ) as f:
-
-            writer = csv.writer(f)
-
             writer.writerow([
-                timestamp,
+                datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
                 machine_no,
                 machine_name,
                 event,
@@ -107,73 +113,38 @@ class EmergencyLogger:
                 snr
             ])
 
-    def emergency_on(self, machine_no):
+    # ========================================================
+    # Heartbeat Control (10 Seconds)
+    # ========================================================
 
-        if machine_no in self.states:
-            return
+    def allow_heartbeat(
+        self,
+        machine_no
+    ):
 
-        self.states[machine_no] = {
-            "start_time": datetime.now()
-        }
+        now = datetime.now()
 
-        print(
-            f"[EMERGENCY START] "
-            f"Machine {machine_no}"
-        )
+        if machine_no not in self.last_heartbeat:
 
-    def emergency_off(self, machine_no):
+            self.last_heartbeat[machine_no] = now
+            return True
 
-        if machine_no not in self.states:
-            return
+        elapsed = (
+            now -
+            self.last_heartbeat[machine_no]
+        ).total_seconds()
 
-        start_time = self.states[machine_no]["start_time"]
+        if elapsed >= 10:
 
-        end_time = datetime.now()
+            self.last_heartbeat[machine_no] = now
+            return True
 
-        duration_seconds = int(
-            (end_time - start_time).total_seconds()
-        )
+        return False
 
-        duration_minutes = round(
-            duration_seconds / 60,
-            2
-        )
-
-        machine_name = MACHINE_NAMES.get(
-            machine_no,
-            f"Machine {machine_no}"
-        )
-
-        with open(
-            EMERGENCY_LOG_FILE,
-            "a",
-            newline="",
-            encoding="utf-8"
-        ) as f:
-
-            writer = csv.writer(f)
-
-            writer.writerow([
-                machine_no,
-                machine_name,
-                "Emergency",
-                start_time.strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-                end_time.strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-                duration_seconds,
-                duration_minutes
-            ])
-
-        print(
-            f"[EMERGENCY END] "
-            f"Machine {machine_no} "
-            f"Duration: {duration_seconds}s"
-        )
-
-        del self.states[machine_no]
+    # ========================================================
+    # Main Update Function
+    # Called whenever a packet is received
+    # ========================================================
 
     def update(
         self,
@@ -185,113 +156,111 @@ class EmergencyLogger:
         snr=None
     ):
 
-        # ---------------------------
-        # Always log heartbeat
-        # ---------------------------
+        # ----------------------------------------------------
+        # HEARTBEAT
+        # Every 10 seconds
+        # ----------------------------------------------------
 
-        self.write_machine_log(
-            machine_no,
-            "HEARTBEAT",
-            plc,
-            emergency,
-            auto_mode,
-            rssi,
-            snr
-        )
+        # if self.allow_heartbeat(machine_no):
+
+        #     self.write_log(
+        #         machine_no,
+        #         "HEARTBEAT",
+        #         plc,
+        #         emergency,
+        #         auto_mode,
+        #         rssi,
+        #         snr
+        #     )
+
+        # ----------------------------------------------------
+        # Get Previous Status
+        # ----------------------------------------------------
 
         previous = self.previous_status.get(
             machine_no
         )
 
-        if previous:
+        # First packet
+        if previous is None:
 
-            if (
-                previous["PLC"] == 0 and
-                plc == 1
-            ):
-                self.write_machine_log(
-                    machine_no,
-                    "PLC_ON",
-                    plc,
-                    emergency,
-                    auto_mode,
-                    rssi,
-                    snr
-                )
+            self.write_log(
+                machine_no,
+                "STARTUP",
+                plc,
+                emergency,
+                auto_mode,
+                rssi,
+                snr
+            )
 
-            if (
-                previous["PLC"] == 1 and
-                plc == 0
-            ):
-                self.write_machine_log(
-                    machine_no,
-                    "PLC_OFF",
-                    plc,
-                    emergency,
-                    auto_mode,
-                    rssi,
-                    snr
-                )
+            self.previous_status[machine_no] = {
+                "PLC": plc,
+                "Emergency": emergency,
+                "Auto": auto_mode
+            }
 
-            if (
-                previous["Auto"] == 0 and
-                auto_mode == 1
-            ):
-                self.write_machine_log(
-                    machine_no,
-                    "MANUAL_MODE",
-                    plc,
-                    emergency,
-                    auto_mode,
-                    rssi,
-                    snr
-                )
+            return
 
-            if (
-                previous["Auto"] == 1 and
-                auto_mode == 0
-            ):
-                self.write_machine_log(
-                    machine_no,
-                    "AUTO_MODE",
-                    plc,
-                    emergency,
-                    auto_mode,
-                    rssi,
-                    snr
-                )
+        # ----------------------------------------------------
+        # PLC Status Changes
+        # ----------------------------------------------------
 
-            if (
-                previous["Emergency"] == 0 and
-                emergency == 1
-            ):
-                self.write_machine_log(
-                    machine_no,
-                    "EMERGENCY_ON",
-                    plc,
-                    emergency,
-                    auto_mode,
-                    rssi,
-                    snr
-                )
+        if previous["PLC"] != plc:
 
-                self.emergency_on(machine_no)
+            self.write_log(
+                machine_no,
+                "PLC_ON" if plc else "PLC_OFF",
+                plc,
+                emergency,
+                auto_mode,
+                rssi,
+                snr
+            )
 
-            if (
-                previous["Emergency"] == 1 and
-                emergency == 0
-            ):
-                self.write_machine_log(
-                    machine_no,
-                    "EMERGENCY_OFF",
-                    plc,
-                    emergency,
-                    auto_mode,
-                    rssi,
-                    snr
-                )
+        # ----------------------------------------------------
+        # Emergency Changes
+        # ----------------------------------------------------
 
-                self.emergency_off(machine_no)
+        if previous["Emergency"] != emergency:
+
+            self.write_log(
+                machine_no,
+                "EMERGENCY_ON"
+                if emergency
+                else "EMERGENCY_OFF",
+                plc,
+                emergency,
+                auto_mode,
+                rssi,
+                snr
+            )
+
+        # ----------------------------------------------------
+        # Auto / Manual Changes
+        #
+        # Your system:
+        # Auto=1 -> Manual Mode
+        # Auto=0 -> Auto Mode
+        # ----------------------------------------------------
+
+        if previous["Auto"] != auto_mode:
+
+            self.write_log(
+                machine_no,
+                "MANUAL_MODE"
+                if auto_mode
+                else "AUTO_MODE",
+                plc,
+                emergency,
+                auto_mode,
+                rssi,
+                snr
+            )
+
+        # ----------------------------------------------------
+        # Save Current Status
+        # ----------------------------------------------------
 
         self.previous_status[machine_no] = {
             "PLC": plc,
