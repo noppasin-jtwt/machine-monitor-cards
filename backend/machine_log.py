@@ -7,8 +7,8 @@ from datetime import datetime
 # ============================================================
 
 MACHINE_NAMES = {
-    1: "Supply Bolt HS/FW [SL]",
-    2: "Supply Bolt Piston [ML]",
+    1: "Supply Bolt Piston [ML]",
+    2: "Supply Bolt HS/FW [SL]",
     3: "Supply Head Cover [ML]",
     4: "FW CiRA CORE [SL]",
 }

@@ -10,17 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiHistoryRouteImport } from './routes/api/history'
 import { Route as ApiPublicMachineStatusRouteImport } from './routes/api/public/machine-status'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiHistoryRoute = ApiHistoryRouteImport.update({
-  id: '/api/history',
-  path: '/api/history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicMachineStatusRoute = ApiPublicMachineStatusRouteImport.update({
@@ -31,31 +25,27 @@ const ApiPublicMachineStatusRoute = ApiPublicMachineStatusRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/api/history': typeof ApiHistoryRoute
   '/api/public/machine-status': typeof ApiPublicMachineStatusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/api/history': typeof ApiHistoryRoute
   '/api/public/machine-status': typeof ApiPublicMachineStatusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/api/history': typeof ApiHistoryRoute
   '/api/public/machine-status': typeof ApiPublicMachineStatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/history' | '/api/public/machine-status'
+  fullPaths: '/' | '/api/public/machine-status'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/history' | '/api/public/machine-status'
-  id: '__root__' | '/' | '/api/history' | '/api/public/machine-status'
+  to: '/' | '/api/public/machine-status'
+  id: '__root__' | '/' | '/api/public/machine-status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApiHistoryRoute: typeof ApiHistoryRoute
   ApiPublicMachineStatusRoute: typeof ApiPublicMachineStatusRoute
 }
 
@@ -66,13 +56,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/history': {
-      id: '/api/history'
-      path: '/api/history'
-      fullPath: '/api/history'
-      preLoaderRoute: typeof ApiHistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/machine-status': {
@@ -87,7 +70,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApiHistoryRoute: ApiHistoryRoute,
   ApiPublicMachineStatusRoute: ApiPublicMachineStatusRoute,
 }
 export const routeTree = rootRouteImport

@@ -9,10 +9,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write .",
-    "sync-history": "node scripts/sync-history.mjs",
-    "predev": "npm run sync-history",
-    "prebuild": "npm run sync-history"
+    "format": "prettier --write ."
   },
   "overrides": {
     "rolldown": "1.2.1"

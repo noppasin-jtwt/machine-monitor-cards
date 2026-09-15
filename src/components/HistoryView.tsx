@@ -163,7 +163,7 @@ export function HistoryView() {
 
       // The Python backend reads the CSV log files and is the preferred source
       // because it also includes new daily logs.
-      const apiRes = await fetch(`${backendUrl}/api/history?limit=5000`, {
+      const apiRes = await fetch(`${backendUrl}/api/history?limit=500`, {
         cache: "no-store",
       });
 
@@ -174,24 +174,23 @@ export function HistoryView() {
           return;
         }
       }
+      else{
+        throw new Error(`History API returned ${apiRes.status}`);
+      }
 
-      // Fallback for a standalone/static deployment: show the bundled
-      // historical CSV shipped with the website.
-      const csvRes = await fetch(`/machine_log.csv?ts=${Date.now()}`, {
-        cache: "no-store",
-      });
-      if (!csvRes.ok) throw new Error(`History CSV returned ${csvRes.status}`);
+      const data = (await apiRes.json()) as unknown;
+      if (!Array.isArray(data)) {
+        throw new Error("History API returned invalid data");
+      }
 
-      const text = await csvRes.text();
-      const data = parseCsv(text);
-      setLogs(data.sort((a, b) => b.timestamp.localeCompare(a.timestamp)));
+      setLogs(data as LogEntry[]);
     } catch (error) {
       console.error("Failed to load machine history:", error);
     } finally {
       setLoading(false);
     }
   }, []);
-
+  
   useEffect(() => {
     void load();
     const timer = window.setInterval(() => void load(), 5000);

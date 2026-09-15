@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, Response
+from flask import Flask, jsonify, Response, request
 from flask_cors import CORS
 import serial
 import json
@@ -100,22 +100,20 @@ def get_history():
     Reads the bundled historical CSV and any daily CSV files written by
     MachineLogger, then sorts newest first. No database is required.
     """
-    project_root = Path(__file__).resolve().parent.parent
-    candidates = [project_root / "machine_log.csv"]
-    candidates.extend(sorted((Path(__file__).resolve().parent / "logs").glob("machine_log_*.csv")))
 
-    rows_by_key = {}
-    for log_file in candidates:
+    log_dir = Path(__file__).resolve().parent / "logs"
+    rows = []
+
+    for log_file in sorted(log_dir.glob("machine_log_*.csv"), reverse = True):
         if not log_file.exists():
             continue
+        
         try:
             with log_file.open("r", encoding="utf-8-sig", newline="") as f:
-                for row in csv.DictReader(f):
-                    key = tuple(row.get(k, "") for k in (
-                        "timestamp", "machine_no", "machine_name", "event",
-                        "plc", "emergency", "auto", "rssi", "snr"
-                    ))
-                    rows_by_key[key] = {
+                reader = csv.DictReader(f)
+
+                for row in reader:
+                    rows.append({
                         "timestamp": row.get("timestamp", ""),
                         "machine_no": row.get("machine_no", ""),
                         "machine_name": row.get("machine_name", ""),
@@ -125,12 +123,19 @@ def get_history():
                         "auto": row.get("auto", ""),
                         "rssi": row.get("rssi", ""),
                         "snr": row.get("snr", ""),
-                    }
+                    })
         except OSError as exc:
-            print(f"[ERROR] History CSV: {exc}")
-
-    rows = list(rows_by_key.values())
+            print(f"[ERROR] Failed to read {log_file}: {exc}")
+ 
     rows.sort(key=lambda row: row["timestamp"], reverse=True)
+
+    try:
+        limit = int(request.args.get("limit", "500"))
+    except ValueError:
+        limit = 500
+
+    if limit > 0:
+        rows = rows[:limit]
     return jsonify(rows)
 
 @app.route("/api/stream")
