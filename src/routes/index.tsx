@@ -29,13 +29,6 @@ export const Route = createFileRoute("/")({
 
 const navItems = ["Main", "History", "Graph"] as const;
 
-// const MACHINE_NAMES: Record<number, string> = {
-//   1: "Supply Bolt Piston [ML]",
-//   2: "Supply Bolt HS/FW [SL]",
-//   3: "Supply Head Cover [ML]",
-//   4: "FW CiRA CORE [SL]"
-// };
-
 const OFFLINE_AFTER_MS = 30_000;
 
 type Machine = {
@@ -250,37 +243,6 @@ function Index() {
       eventSource.close()
     };
   }, []);
-
-  // useEffect(() => {
-
-  // const loadMachines = async () => {
-
-  //   try {
-
-  //     const data = await getMachines();
-
-  //     setMachines(data);
-
-  //     //setLoading(false);
-
-  //   } catch (error) {
-
-  //     console.error(error);
-
-  //   }
-
-  // };
-
-  //   loadMachines();
-
-  //   const timer = setInterval(
-  //     loadMachines,
-  //     1000
-  //   );
-
-  //   return () => clearInterval(timer);
-
-  // }, []);
 
   const activeAlarms = useMemo(
     () =>

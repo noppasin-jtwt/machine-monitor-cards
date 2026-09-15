@@ -1,3 +1,4 @@
+import csv
 from flask import Flask, jsonify, Response
 from flask_cors import CORS
 import serial
@@ -92,20 +93,37 @@ def get_machines():
 
 
 @app.route("/api/history")
-def get_history():
-    log_file = MachineLogger.get_machine_log_file()
+def get_history(limit: int = 2000):
+    if not CSV_FILEexists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Log file not found: {CSV_FILE}"
+        )
+    records = []
+    with CSV_FILE.open("r", encoding='utf-8-sig',newline="") as f:
+        reader = csv.DictReader(f)
 
-    row = []
-    try:
-        with open(log_file, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-    except FileNotFoundError:
-        pass
-    rows.reverse()
+        for row in reader:
+            records.append({
+                "timestamp": row.get("timestamp", ""),
+                "machine_no": row.get("machine_no", ""),
+                "machine_name": row.get("machine_name", ""),
+                "event": row.get("event", ""),
+                "plc": row.get("plc", ""),
+                "emergency": row.get("emergency", ""),
+                "auto": row.get("auto", ""),
+            })
 
+    records.sort(
+        key=lambda x: x["timestamp"],
+        reverse = True
+    )
 
-    return jsonify(rows)
+    return {
+        "success": True,
+        "count": len(records),
+        "data": records[:limit]
+    }
 
 @app.route("/api/stream")
 def stream():

@@ -19,7 +19,7 @@ export const Route = createFileRoute("/api/history")({
         const url = new URL(request.url);
         const limit = Math.min(Number(url.searchParams.get("limit")) || 500, 2000);
 
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { supabaseAdmin } = await import("@/integrations/supabase/client");
         const db = supabaseAdmin as unknown as {
           from: (table: string) => ReturnType<typeof supabaseAdmin.from>;
         };
