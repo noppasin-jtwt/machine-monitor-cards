@@ -27,7 +27,10 @@ class MachineLogger:
 
         # Create logs folder automatically
 
-        self.log_dir = "logs"
+        self.log_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "logs"
+        )
 
         os.makedirs(
             self.log_dir,

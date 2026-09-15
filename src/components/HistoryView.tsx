@@ -21,6 +21,7 @@ const EVENTS = [
   "AUTO_MODE",
   "EMERGENCY_ON",
   "EMERGENCY_OFF",
+  "STARTUP",
 ] as const;
 
 const MACHINE_OPTIONS = [
@@ -77,6 +78,71 @@ function download(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
+function parseCsv(text: string): LogEntry[] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"') {
+      if (quoted && next === '"') {
+        field += '"';
+        i += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === "," && !quoted) {
+      row.push(field);
+      field = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") i += 1;
+      row.push(field);
+      if (row.some((value) => value.length > 0)) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  if (rows.length < 2) return [];
+
+  const headers = rows[0];
+  if (!headers) {
+    return [];
+  }
+  const normalizedHeaders = headers.map((header) =>
+    header.trim().toLowerCase()
+  );
+
+  const index = (name: string) => normalizedHeaders.indexOf(name);
+  const value = (cells: string[], name: string) => {
+    const i = index(name);
+    return i >= 0 ? (cells[i] ?? "").trim() : "";
+  };
+
+  return rows.slice(1).map((cells) => ({
+    timestamp: value(cells, "timestamp"),
+    machine_no: value(cells, "machine_no"),
+    machine_name: value(cells, "machine_name"),
+    event: value(cells, "event"),
+    plc: value(cells, "plc"),
+    emergency: value(cells, "emergency"),
+    auto: value(cells, "auto"),
+    rssi: value(cells, "rssi"),
+    snr: value(cells, "snr"),
+  })).filter((entry) => entry.timestamp || entry.machine_name || entry.event);
+}
+
 const selectClass =
   "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -91,12 +157,36 @@ export function HistoryView() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/history");
-      if (!res.ok) return;
-      const data = (await res.json()) as LogEntry[];
-      if (Array.isArray(data)) setLogs(data);
-    } catch {
-      // keep previous data on network errors
+      const backendUrl = (
+        import.meta.env["VITE_BACKEND_URL"] || "http://172.20.177.186:5000"
+      ).replace(/\/$/, "");
+
+      // The Python backend reads the CSV log files and is the preferred source
+      // because it also includes new daily logs.
+      const apiRes = await fetch(`${backendUrl}/api/history?limit=5000`, {
+        cache: "no-store",
+      });
+
+      if (apiRes.ok) {
+        const data = (await apiRes.json()) as unknown;
+        if (Array.isArray(data)) {
+          setLogs(data as LogEntry[]);
+          return;
+        }
+      }
+
+      // Fallback for a standalone/static deployment: show the bundled
+      // historical CSV shipped with the website.
+      const csvRes = await fetch(`/machine_log.csv?ts=${Date.now()}`, {
+        cache: "no-store",
+      });
+      if (!csvRes.ok) throw new Error(`History CSV returned ${csvRes.status}`);
+
+      const text = await csvRes.text();
+      const data = parseCsv(text);
+      setLogs(data.sort((a, b) => b.timestamp.localeCompare(a.timestamp)));
+    } catch (error) {
+      console.error("Failed to load machine history:", error);
     } finally {
       setLoading(false);
     }
